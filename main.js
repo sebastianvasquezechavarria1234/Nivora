@@ -3,7 +3,7 @@ import * as THREE from 'three';
 const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setClearColor(0x000000);
 
 const scene = new THREE.Scene();
@@ -29,9 +29,12 @@ function createNoiseTexture() {
 
 const noiseTexture = createNoiseTexture();
 
-const rtA = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-  type: THREE.FloatType
-});
+const RENDER_SCALE = 0.7;
+const rtA = new THREE.WebGLRenderTarget(
+  Math.floor(window.innerWidth * RENDER_SCALE),
+  Math.floor(window.innerHeight * RENDER_SCALE),
+  { type: THREE.FloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }
+);
 
 const SC = 250.0;
 
@@ -107,7 +110,7 @@ float terrainH(in vec2 x) {
   float a = 0.0;
   float b = 1.0;
   vec2 d = vec2(0.0);
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 8; i++) {
     vec3 n = noised(p);
     d += n.yz;
     a += b * n.x / (1.0 + dot(d, d));
@@ -122,7 +125,7 @@ float terrainM(in vec2 x) {
   float a = 0.0;
   float b = 1.0;
   vec2 d = vec2(0.0);
-  for (int i = 0; i < 9; i++) {
+  for (int i = 0; i < 6; i++) {
     vec3 n = noised(p);
     d += n.yz;
     a += b * n.x / (1.0 + dot(d, d));
@@ -149,7 +152,7 @@ float terrainLow(in vec2 x) {
 
 float raycast(in vec3 ro, in vec3 rd, in float tmin, in float tmax) {
   float t = tmin;
-  for (int i = 0; i < 300; i++) {
+  for (int i = 0; i < 120; i++) {
     vec3 pos = ro + t * rd;
     float h = pos.y - terrainM(pos.xz);
     if (abs(h) < (0.0015 * t) || t > tmax) break;
@@ -162,7 +165,7 @@ float softShadow(in vec3 ro, in vec3 rd, float dis) {
   float minStep = clamp(dis * 0.01, SC * 0.5, SC * 50.0);
   float res = 1.0;
   float t = 0.001;
-  for (int i = 0; i < 80; i++) {
+  for (int i = 0; i < 30; i++) {
     vec3 p = ro + t * rd;
     float h = p.y - terrainM(p.xz);
     res = min(res, 16.0 * h / t);
@@ -186,9 +189,7 @@ float fbm(vec2 p) {
   f += 0.2500 * texture(iChannel0, p / 256.0).x;
   p = m2 * p * 2.03;
   f += 0.1250 * texture(iChannel0, p / 256.0).x;
-  p = m2 * p * 2.01;
-  f += 0.0625 * texture(iChannel0, p / 256.0).x;
-  return f / 0.9375;
+  return f / 0.875;
 }
 
 const float kMaxT = 5000.0 * SC;
@@ -281,9 +282,7 @@ void main() {
   vec2 p = (-iResolution.xy + 2.0 * fragCoord) / iResolution.y;
   vec3 rd = cam * normalize(vec3(p, fl));
   vec4 res = render(ro, rd);
-  float vel = 0.0;
-  if (res.w < 0.0) vel = -1.0;
-  gl_FragColor = vec4(res.xyz, vel);
+  gl_FragColor = vec4(res.xyz, 1.0);
 }
 `;
 
@@ -304,21 +303,7 @@ uniform vec3 iResolution;
 varying vec2 vUv;
 
 void main() {
-  vec4 data = texture(iChannel0, vUv);
-  vec3 col = vec3(0.0);
-
-  if (data.w < 0.0) {
-    col = data.xyz;
-  } else {
-    float ss = mod(data.w, 1024.0) / 1023.0;
-    float st = floor(data.w / 1024.0) / 1023.0;
-    vec2 dir = (-1.0 + 2.0 * vec2(ss, st)) * 0.25;
-    for (int i = 0; i < 32; i++) {
-      float h = float(i) / 31.0;
-      col += texture(iChannel0, vUv + dir * h).xyz;
-    }
-    col /= 32.0;
-  }
+  vec3 col = texture(iChannel0, vUv).xyz;
 
   col *= 0.5 + 0.5 * pow(16.0 * vUv.x * vUv.y * (1.0 - vUv.x) * (1.0 - vUv.y), 0.1);
   col = clamp(col, 0.0, 1.0);
@@ -419,5 +404,5 @@ window.addEventListener('resize', () => {
   terrainUniforms.iResolution.value.set(w, h, 1);
   postUniforms.iResolution.value.set(w, h, 1);
   renderer.setSize(w, h);
-  rtA.setSize(w, h);
+  rtA.setSize(Math.floor(w * RENDER_SCALE), Math.floor(h * RENDER_SCALE));
 });
