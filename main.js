@@ -14,7 +14,7 @@ function createNoiseTexture() {
   const data = new Uint8Array(size * size * 4);
   for (let i = 0; i < size * size; i++) {
     const v = Math.floor(Math.random() * 256);
-    data[i * 4 + 0] = v;
+    data[i * 4] = v;
     data[i * 4 + 1] = v;
     data[i * 4 + 2] = v;
     data[i * 4 + 3] = 255;
@@ -92,100 +92,109 @@ vec3 noised(in vec2 x) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   vec2 du = 6.0 * f * (1.0 - f);
   vec2 p = floor(x);
-  float a = texture(iChannel0, (p + vec2(0.0,0.0) + 0.5) / 256.0).x;
-  float b = texture(iChannel0, (p + vec2(1.0,0.0) + 0.5) / 256.0).x;
-  float c = texture(iChannel0, (p + vec2(0.0,1.0) + 0.5) / 256.0).x;
-  float d = texture(iChannel0, (p + vec2(1.0,1.0) + 0.5) / 256.0).x;
-  return vec3(a + (b-a)*u.x + (c-a)*u.y + (a-b-c+d)*u.x*u.y,
-              du * (vec2(b-a,c-a) + (a-b-c+d)*u.yx));
+  float a = texture(iChannel0, (p + vec2(0.0, 0.0) + 0.5) / 256.0).x;
+  float b = texture(iChannel0, (p + vec2(1.0, 0.0) + 0.5) / 256.0).x;
+  float c = texture(iChannel0, (p + vec2(0.0, 1.0) + 0.5) / 256.0).x;
+  float d = texture(iChannel0, (p + vec2(1.0, 1.0) + 0.5) / 256.0).x;
+  return vec3(a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y,
+              du * (vec2(b - a, c - a) + (a - b - c + d) * u.yx));
 }
 
-const mat2 m2 = mat2(0.8,-0.6,0.6,0.8);
+const mat2 m2 = mat2(0.8, -0.6, 0.6, 0.8);
 
 float terrainH(in vec2 x) {
-  vec2 p = x*0.003/SC;
-  float a = 0.0; float b = 1.0; vec2 d = vec2(0.0);
-  for(int i=0; i<16; i++) {
+  vec2 p = x * 0.003 / SC;
+  float a = 0.0;
+  float b = 1.0;
+  vec2 d = vec2(0.0);
+  for (int i = 0; i < 16; i++) {
     vec3 n = noised(p);
     d += n.yz;
-    a += b*n.x/(1.0+dot(d,d));
+    a += b * n.x / (1.0 + dot(d, d));
     b *= 0.5;
-    p = m2*p*2.0;
+    p = m2 * p * 2.0;
   }
-  return SC*120.0*a;
+  return SC * 120.0 * a;
 }
 
 float terrainM(in vec2 x) {
-  vec2 p = x*0.003/SC;
-  float a = 0.0; float b = 1.0; vec2 d = vec2(0.0);
-  for(int i=0; i<9; i++) {
+  vec2 p = x * 0.003 / SC;
+  float a = 0.0;
+  float b = 1.0;
+  vec2 d = vec2(0.0);
+  for (int i = 0; i < 9; i++) {
     vec3 n = noised(p);
     d += n.yz;
-    a += b*n.x/(1.0+dot(d,d));
+    a += b * n.x / (1.0 + dot(d, d));
     b *= 0.5;
-    p = m2*p*2.0;
+    p = m2 * p * 2.0;
   }
-  return SC*120.0*a;
+  return SC * 120.0 * a;
 }
 
 float terrainLow(in vec2 x) {
-  vec2 p = x*0.003/SC;
-  float a = 0.0; float b = 1.0; vec2 d = vec2(0.0);
-  for(int i=0; i<3; i++) {
+  vec2 p = x * 0.003 / SC;
+  float a = 0.0;
+  float b = 1.0;
+  vec2 d = vec2(0.0);
+  for (int i = 0; i < 3; i++) {
     vec3 n = noised(p);
     d += n.yz;
-    a += b*n.x/(1.0+dot(d,d));
+    a += b * n.x / (1.0 + dot(d, d));
     b *= 0.5;
-    p = m2*p*2.0;
+    p = m2 * p * 2.0;
   }
-  return SC*120.0*a;
+  return SC * 120.0 * a;
 }
 
 float raycast(in vec3 ro, in vec3 rd, in float tmin, in float tmax) {
   float t = tmin;
-  for(int i=0; i<300; i++) {
-    vec3 pos = ro + t*rd;
+  for (int i = 0; i < 300; i++) {
+    vec3 pos = ro + t * rd;
     float h = pos.y - terrainM(pos.xz);
-    if(abs(h) < (0.0015*t) || t > tmax) break;
-    t += 0.4*h;
+    if (abs(h) < (0.0015 * t) || t > tmax) break;
+    t += 0.4 * h;
   }
   return t;
 }
 
 float softShadow(in vec3 ro, in vec3 rd, float dis) {
-  float minStep = clamp(dis*0.01, SC*0.5, SC*50.0);
+  float minStep = clamp(dis * 0.01, SC * 0.5, SC * 50.0);
   float res = 1.0;
   float t = 0.001;
-  for(int i=0; i<80; i++) {
-    vec3 p = ro + t*rd;
+  for (int i = 0; i < 80; i++) {
+    vec3 p = ro + t * rd;
     float h = p.y - terrainM(p.xz);
-    res = min(res, 16.0*h/t);
+    res = min(res, 16.0 * h / t);
     t += max(minStep, h);
-    if(res < 0.001 || p.y > (SC*200.0)) break;
+    if (res < 0.001 || p.y > (SC * 200.0)) break;
   }
   return clamp(res, 0.0, 1.0);
 }
 
 vec3 calcNormal(in vec3 pos, float t) {
-  vec2 eps = vec2(0.001*t, 0.0);
-  return normalize(vec3(terrainH(pos.xz-eps.xy) - terrainH(pos.xz+eps.xy),
-                        2.0*eps.x,
-                        terrainH(pos.xz-eps.yx) - terrainH(pos.xz+eps.yx)));
+  vec2 eps = vec2(0.001 * t, 0.0);
+  return normalize(vec3(terrainH(pos.xz - eps.xy) - terrainH(pos.xz + eps.xy),
+                        2.0 * eps.x,
+                        terrainH(pos.xz - eps.yx) - terrainH(pos.xz + eps.yx)));
 }
 
 float fbm(vec2 p) {
   float f = 0.0;
-  f += 0.5000*texture(iChannel0, p/256.0).x; p = m2*p*2.02;
-  f += 0.2500*texture(iChannel0, p/256.0).x; p = m2*p*2.03;
-  f += 0.1250*texture(iChannel0, p/256.0).x; p = m2*p*2.01;
-  f += 0.0625*texture(iChannel0, p/256.0).x;
-  return f/0.9375;
+  f += 0.5000 * texture(iChannel0, p / 256.0).x;
+  p = m2 * p * 2.02;
+  f += 0.2500 * texture(iChannel0, p / 256.0).x;
+  p = m2 * p * 2.03;
+  f += 0.1250 * texture(iChannel0, p / 256.0).x;
+  p = m2 * p * 2.01;
+  f += 0.0625 * texture(iChannel0, p / 256.0).x;
+  return f / 0.9375;
 }
 
-const float kMaxT = 5000.0*SC;
+const float kMaxT = 5000.0 * SC;
 
 mat3 setCamera(in vec3 ro, in vec3 ta, float cr) {
-  vec3 cw = normalize(ta-ro);
+  vec3 cw = normalize(ta - ro);
   vec3 cp = vec3(sin(cr), cos(cr), 0.0);
   vec3 cu = normalize(cross(cw, cp));
   vec3 cv = normalize(cross(cu, cw));
@@ -197,10 +206,10 @@ vec4 render(in vec3 ro, in vec3 rd) {
   float tmin = 1.0;
   float tmax = kMaxT;
 
-  float maxh = 250.0*SC;
-  float tp = (maxh - ro.y)/rd.y;
-  if(tp > 0.0) {
-    if(ro.y > maxh) tmin = max(tmin, tp);
+  float maxh = 250.0 * SC;
+  float tp = (maxh - ro.y) / rd.y;
+  if (tp > 0.0) {
+    if (ro.y > maxh) tmin = max(tmin, tp);
     else tmax = min(tmax, tp);
   }
 
@@ -208,77 +217,72 @@ vec4 render(in vec3 ro, in vec3 rd) {
   vec3 col;
   float t = raycast(ro, rd, tmin, tmax);
 
-  if(t > tmax) {
-    col = vec3(0.3, 0.5, 0.85) - rd.y*rd.y*0.5;
-    col = mix(col, 0.85*vec3(0.7, 0.75, 0.85), pow(1.0-max(rd.y,0.0), 4.0));
-    col += 0.25*vec3(1.0, 0.8, 0.6)*pow(sundot, 64.0);
-    col += 0.2*vec3(1.0, 0.8, 0.6)*pow(sundot, 512.0);
-    vec2 sc = ro.xz + rd.xz*(SC*1000.0 - ro.y)/rd.y;
-    col = mix(col, vec3(1.0, 0.95, 1.0), 0.5*smoothstep(0.5, 0.8, fbm(0.0005*sc/SC)));
-    col = mix(col, 0.68*vec3(0.4, 0.65, 1.0), pow(1.0-max(rd.y,0.0), 16.0));
+  if (t > tmax) {
+    col = vec3(0.3, 0.5, 0.85) - rd.y * rd.y * 0.5;
+    col = mix(col, 0.85 * vec3(0.7, 0.75, 0.85), pow(1.0 - max(rd.y, 0.0), 4.0));
+    col += 0.25 * vec3(1.0, 0.8, 0.6) * pow(sundot, 64.0);
+    col += 0.2 * vec3(1.0, 0.8, 0.6) * pow(sundot, 512.0);
+    vec2 sc = ro.xz + rd.xz * (SC * 1000.0 - ro.y) / rd.y;
+    col = mix(col, vec3(1.0, 0.95, 1.0), 0.5 * smoothstep(0.5, 0.8, fbm(0.0005 * sc / SC)));
+    col = mix(col, 0.68 * vec3(0.4, 0.65, 1.0), pow(1.0 - max(rd.y, 0.0), 16.0));
     t = -1.0;
   } else {
-    vec3 pos = ro + t*rd;
+    vec3 pos = ro + t * rd;
     vec3 nor = calcNormal(pos, t);
     vec3 ref = reflect(rd, nor);
-    float fre = clamp(1.0+dot(rd,nor), 0.0, 1.0);
+    float fre = clamp(1.0 + dot(rd, nor), 0.0, 1.0);
     vec3 hal = normalize(light1 - rd);
 
-    float r = texture(iChannel0, (7.0/SC)*pos.xz/256.0).x;
-    col = (r*0.25+0.75)*0.9*mix(vec3(0.08,0.05,0.03), vec3(0.10,0.09,0.08),
-                                  texture(iChannel0, 0.00007*vec2(pos.x, pos.y*48.0)/SC).x);
-    col = mix(col, 0.20*vec3(0.45,.30,0.15)*(0.50+0.50*r), smoothstep(0.70,0.9,nor.y));
-    col = mix(col, 0.15*vec3(0.30,.30,0.10)*(0.25+0.75*r), smoothstep(0.95,1.0,nor.y));
-    col *= 0.1 + 1.8*sqrt(fbm(pos.xz*0.04)*fbm(pos.xz*0.005));
+    float r = texture(iChannel0, (7.0 / SC) * pos.xz / 256.0).x;
+    col = (r * 0.25 + 0.75) * 0.9 * mix(vec3(0.08, 0.05, 0.03), vec3(0.10, 0.09, 0.08),
+                                         texture(iChannel0, 0.00007 * vec2(pos.x, pos.y * 48.0) / SC).x);
+    col = mix(col, 0.20 * vec3(0.45, 0.30, 0.15) * (0.50 + 0.50 * r), smoothstep(0.70, 0.9, nor.y));
+    col = mix(col, 0.15 * vec3(0.30, 0.30, 0.10) * (0.25 + 0.75 * r), smoothstep(0.95, 1.0, nor.y));
+    col *= 0.1 + 1.8 * sqrt(fbm(pos.xz * 0.04) * fbm(pos.xz * 0.005));
 
-    float h = smoothstep(55.0, 80.0, pos.y/SC + 25.0*fbm(0.01*pos.xz/SC));
-    float e = smoothstep(1.0-0.5*h, 1.0-0.1*h, nor.y);
-    float o = 0.3 + 0.7*smoothstep(0.0, 0.1, nor.x+h*h);
-    float s = h*e*o;
-    col = mix(col, 0.29*vec3(0.62,0.65,0.7), smoothstep(0.1, 0.9, s));
+    float h = smoothstep(55.0, 80.0, pos.y / SC + 25.0 * fbm(0.01 * pos.xz / SC));
+    float e = smoothstep(1.0 - 0.5 * h, 1.0 - 0.1 * h, nor.y);
+    float o = 0.3 + 0.7 * smoothstep(0.0, 0.1, nor.x + h * h);
+    float s = h * e * o;
+    col = mix(col, 0.29 * vec3(0.62, 0.65, 0.7), smoothstep(0.1, 0.9, s));
 
-    float amb = clamp(0.5+0.5*nor.y, 0.0, 1.0);
+    float amb = clamp(0.5 + 0.5 * nor.y, 0.0, 1.0);
     float dif = clamp(dot(light1, nor), 0.0, 1.0);
-    float bac = clamp(0.2+0.8*dot(normalize(vec3(-light1.x, 0.0, light1.z)), nor), 0.0, 1.0);
+    float bac = clamp(0.2 + 0.8 * dot(normalize(vec3(-light1.x, 0.0, light1.z)), nor), 0.0, 1.0);
     float sh = 1.0;
-    if(dif >= 0.0001) sh = softShadow(pos + light1*SC*0.05, light1, t);
+    if (dif >= 0.0001) sh = softShadow(pos + light1 * SC * 0.05, light1, t);
     vec3 lin = vec3(0.0);
-    lin += dif*vec3(8.00,5.00,3.00)*1.3*vec3(sh, sh*sh*0.5+0.5*sh, sh*sh*0.8+0.2*sh);
-    lin += amb*vec3(0.40,0.60,1.00)*1.2;
-    lin += bac*vec3(0.40,0.50,0.60);
+    lin += dif * vec3(8.00, 5.00, 3.00) * 1.3 * vec3(sh, sh * sh * 0.5 + 0.5 * sh, sh * sh * 0.8 + 0.2 * sh);
+    lin += amb * vec3(0.40, 0.60, 1.00) * 1.2;
+    lin += bac * vec3(0.40, 0.50, 0.60);
     col *= lin;
 
-    col += (0.7+0.3*s)*(0.04+0.96*pow(clamp(1.0+dot(hal,rd),0.0,1.0),5.0))*
-           vec3(7.0,5.0,3.0)*dif*sh*
-           pow(clamp(dot(nor,hal), 0.0, 1.0), 16.0);
-    col += s*0.65*pow(fre, 4.0)*vec3(0.3,0.5,0.6)*smoothstep(0.0,0.6,ref.y);
+    col += (0.7 + 0.3 * s) * (0.04 + 0.96 * pow(clamp(1.0 + dot(hal, rd), 0.0, 1.0), 5.0)) *
+           vec3(7.0, 5.0, 3.0) * dif * sh *
+           pow(clamp(dot(nor, hal), 0.0, 1.0), 16.0);
+    col += s * 0.65 * pow(fre, 4.0) * vec3(0.3, 0.5, 0.6) * smoothstep(0.0, 0.6, ref.y);
 
-    float fo = 1.0 - exp(-pow(0.001*t/SC, 1.5));
-    vec3 fco = 0.65*vec3(0.4, 0.65, 1.0);
+    float fo = 1.0 - exp(-pow(0.001 * t / SC, 1.5));
+    vec3 fco = 0.65 * vec3(0.4, 0.65, 1.0);
     col = mix(col, fco, fo);
   }
 
-  col += 0.3*vec3(1.0,0.7,0.3)*pow(sundot, 8.0);
+  col += 0.3 * vec3(1.0, 0.7, 0.3) * pow(sundot, 8.0);
   col = sqrt(col);
   return vec4(col, t);
 }
 
 void main() {
   vec2 fragCoord = vUv * iResolution.xy;
-
   vec3 ro = uCameraPos;
   vec3 ta = uCameraTarget;
   mat3 cam = setCamera(ro, ta, 0.0);
-
   float fl = 3.0;
-  vec2 p = (-iResolution.xy + 2.0*fragCoord)/iResolution.y;
+  vec2 p = (-iResolution.xy + 2.0 * fragCoord) / iResolution.y;
   vec3 rd = cam * normalize(vec3(p, fl));
-
   vec4 res = render(ro, rd);
-
   float vel = 0.0;
-  if(res.w < 0.0) vel = -1.0;
-
+  if (res.w < 0.0) vel = -1.0;
   gl_FragColor = vec4(res.xyz, vel);
 }
 `;
@@ -303,23 +307,22 @@ void main() {
   vec4 data = texture(iChannel0, vUv);
   vec3 col = vec3(0.0);
 
-  if(data.w < 0.0) {
+  if (data.w < 0.0) {
     col = data.xyz;
   } else {
-    float ss = mod(data.w, 1024.0)/1023.0;
-    float st = floor(data.w/1024.0)/1023.0;
-    vec2 dir = (-1.0 + 2.0*vec2(ss, st))*0.25;
-    for(int i=0; i<32; i++) {
-      float h = float(i)/31.0;
-      col += texture(iChannel0, vUv + dir*h).xyz;
+    float ss = mod(data.w, 1024.0) / 1023.0;
+    float st = floor(data.w / 1024.0) / 1023.0;
+    vec2 dir = (-1.0 + 2.0 * vec2(ss, st)) * 0.25;
+    for (int i = 0; i < 32; i++) {
+      float h = float(i) / 31.0;
+      col += texture(iChannel0, vUv + dir * h).xyz;
     }
     col /= 32.0;
   }
 
-  col *= 0.5 + 0.5*pow(16.0*vUv.x*vUv.y*(1.0-vUv.x)*(1.0-vUv.y), 0.1);
+  col *= 0.5 + 0.5 * pow(16.0 * vUv.x * vUv.y * (1.0 - vUv.x) * (1.0 - vUv.y), 0.1);
   col = clamp(col, 0.0, 1.0);
-  col = col*0.6 + 0.4*col*col*(3.0-2.0*col) + vec3(0.0, 0.0, 0.04);
-
+  col = col * 0.6 + 0.4 * col * col * (3.0 - 2.0 * col) + vec3(0.0, 0.0, 0.04);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -397,12 +400,17 @@ function animate() {
   terrainUniforms.iTime.value = now * 0.001;
 
   renderer.setRenderTarget(rtA);
-  renderer.render(quad, orthoCamera);
+  scene.children.length = 0;
+  scene.add(quad);
+  renderer.render(scene, orthoCamera);
 
   postUniforms.iChannel0.value = rtA.texture;
   renderer.setRenderTarget(null);
-  renderer.render(postQuad, orthoCamera);
+  scene.children.length = 0;
+  scene.add(postQuad);
+  renderer.render(scene, orthoCamera);
 }
+
 animate();
 
 window.addEventListener('resize', () => {
