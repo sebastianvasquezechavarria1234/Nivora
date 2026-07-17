@@ -4,9 +4,10 @@ const canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000);
 
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 function createNoiseTexture() {
   const size = 256;
@@ -22,7 +23,14 @@ function createNoiseTexture() {
 
 const noiseTexture = createNoiseTexture();
 
-const vertexShader = `
+const rtA = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+  type: THREE.FloatType
+});
+const rtB = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+  type: THREE.FloatType
+});
+
+const terrainVertexShader = `
 varying vec2 vUv;
 void main() {
   vUv = uv;
@@ -30,7 +38,7 @@ void main() {
 }
 `;
 
-const fragmentShader = `
+const terrainFragmentShader = `
 precision highp float;
 
 uniform vec3 iResolution;
@@ -53,13 +61,11 @@ vec3 noised(in vec2 x) {
   vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
   vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
   #endif
-
   ivec2 p = ivec2(floor(x));
   float a = texelFetch(iChannel0, (p + ivec2(0, 0)) & 255, 0).x;
   float b = texelFetch(iChannel0, (p + ivec2(1, 0)) & 255, 0).x;
   float c = texelFetch(iChannel0, (p + ivec2(0, 1)) & 255, 0).x;
   float d = texelFetch(iChannel0, (p + ivec2(1, 1)) & 255, 0).x;
-
   return vec3(a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y,
               du * (vec2(b - a, c - a) + (a - b - c + d) * u.yx));
 }
@@ -184,10 +190,8 @@ vec4 render(in vec3 ro, in vec3 rd) {
     col = mix(col, 0.85 * vec3(0.7, 0.75, 0.85), pow(1.0 - max(rd.y, 0.0), 4.0));
     col += 0.25 * vec3(1.0, 0.8, 0.6) * pow(sundot, 64.0);
     col += 0.2 * vec3(1.0, 0.8, 0.6) * pow(sundot, 512.0);
-
     vec2 sc = ro.xz + rd.xz * (SC * 1000.0 - ro.y) / rd.y;
     col = mix(col, vec3(1.0, 0.95, 1.0), 0.5 * smoothstep(0.5, 0.8, fbm(0.0005 * sc / SC)));
-
     col = mix(col, 0.68 * vec3(0.4, 0.65, 1.0), pow(1.0 - max(rd.y, 0.0), 16.0));
     t = -1.0;
   } else {
@@ -267,7 +271,6 @@ void main() {
   vec3 ro, ta;
   float cr, fl;
   moveCamera(time, ro, ta, cr, fl);
-
   mat3 cam = setCamera(ro, ta, cr);
 
   vec2 p = (-iResolution.xy + 2.0 * fragCoord) / iResolution.y;
@@ -282,12 +285,10 @@ void main() {
   #else
       vec2 s = p;
   #endif
-
       vec3 rd = cam * normalize(vec3(s, fl));
       vec4 res = render(ro, rd);
       t = min(t, res.w);
       tot += res.xyz;
-
   #if AA > 1
     }
     tot /= float(AA * AA);
@@ -302,11 +303,9 @@ void main() {
     float oldCr, oldFl;
     moveCamera(oldTime, oldRo, oldTa, oldCr, oldFl);
     mat3 oldCam = setCamera(oldRo, oldTa, oldCr);
-
     #if AA > 1
     vec3 rd = cam * normalize(vec3(p, fl));
     #endif
-
     vec3 wpos = ro + rd * t;
     vec3 cpos = vec3(dot(wpos - oldRo, oldCam[0]),
                      dot(wpos - oldRo, oldCam[1]),
@@ -322,39 +321,113 @@ void main() {
 }
 `;
 
-const uniforms = {
+const postVertexShader = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position, 1.0);
+}
+`;
+
+const postFragmentShader = `
+precision highp float;
+
+uniform sampler2D iChannel0;
+uniform vec3 iResolution;
+
+varying vec2 vUv;
+
+void main() {
+  vec4 data = texture(iChannel0, vUv);
+  vec3 col = vec3(0.0);
+
+  if (data.w < 0.0) {
+    col = data.xyz;
+  } else {
+    float ss = mod(data.w, 1024.0) / 1023.0;
+    float st = floor(data.w / 1024.0) / 1023.0;
+    vec2 dir = (-1.0 + 2.0 * vec2(ss, st)) * 0.25;
+    col = vec3(0.0);
+    for (int i = 0; i < 32; i++) {
+      float h = float(i) / 31.0;
+      vec2 pos = vUv + dir * h;
+      col += texture(iChannel0, pos).xyz;
+    }
+    col /= 32.0;
+  }
+
+  col *= 0.5 + 0.5 * pow(16.0 * vUv.x * vUv.y * (1.0 - vUv.x) * (1.0 - vUv.y), 0.1);
+  col = clamp(col, 0.0, 1.0);
+  col = col * 0.6 + 0.4 * col * col * (3.0 - 2.0 * col) + vec3(0.0, 0.0, 0.04);
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+const terrainUniforms = {
   iTime: { value: 0 },
   iResolution: { value: new THREE.Vector3(window.innerWidth, window.innerHeight, 1) },
   iMouse: { value: new THREE.Vector2(0, 0) },
   iChannel0: { value: noiseTexture }
 };
 
-const material = new THREE.ShaderMaterial({
-  vertexShader,
-  fragmentShader,
-  uniforms
+const terrainMaterial = new THREE.ShaderMaterial({
+  vertexShader: terrainVertexShader,
+  fragmentShader: terrainFragmentShader,
+  uniforms: terrainUniforms,
+  depthTest: false,
+  depthWrite: false
 });
 
-const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
-scene.add(mesh);
+const postUniforms = {
+  iChannel0: { value: null },
+  iResolution: { value: new THREE.Vector3(window.innerWidth, window.innerHeight, 1) }
+};
+
+const postMaterial = new THREE.ShaderMaterial({
+  vertexShader: postVertexShader,
+  fragmentShader: postFragmentShader,
+  uniforms: postUniforms,
+  depthTest: false,
+  depthWrite: false
+});
+
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), terrainMaterial);
+const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial);
 
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener('mousemove', (e) => {
   mouse.x = e.clientX;
-  mouse.y = e.clientY;
+  mouse.y = window.innerHeight - e.clientY;
 });
 
 function animate() {
   requestAnimationFrame(animate);
-  uniforms.iTime.value = performance.now() * 0.001;
-  uniforms.iMouse.value.set(mouse.x, mouse.y);
-  renderer.render(scene, camera);
+
+  const t = performance.now() * 0.001;
+  terrainUniforms.iTime.value = t;
+  terrainUniforms.iMouse.value.set(mouse.x, mouse.y);
+
+  scene.remove(postQuad);
+  scene.add(quad);
+  quad.material = terrainMaterial;
+  renderer.setRenderTarget(rtA);
+  renderer.render(scene, orthoCamera);
+
+  scene.remove(quad);
+  scene.add(postQuad);
+  postUniforms.iChannel0.value = rtA.texture;
+  renderer.setRenderTarget(null);
+  renderer.render(scene, orthoCamera);
 }
 animate();
 
 window.addEventListener('resize', () => {
   const w = window.innerWidth;
   const h = window.innerHeight;
-  uniforms.iResolution.value.set(w, h, 1);
+  terrainUniforms.iResolution.value.set(w, h, 1);
+  postUniforms.iResolution.value.set(w, h, 1);
   renderer.setSize(w, h);
+  rtA.setSize(w, h);
+  rtB.setSize(w, h);
 });
