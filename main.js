@@ -6,18 +6,30 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setClearColor(0x000000);
 
-const scene = new THREE.Scene();
+const terrainScene = new THREE.Scene();
+const postScene = new THREE.Scene();
 const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+function hashForTexture(ix, iz) {
+  let n = (ix | 0) * 374761393 + (iz | 0) * 668265263;
+  n = (n ^ (n >> 13)) * 1274126177 | 0;
+  return ((n ^ (n >> 16)) & 0x7fffffff) / 0x7fffffff;
+}
 
 function createNoiseTexture() {
   const size = 256;
   const data = new Uint8Array(size * size * 4);
-  for (let i = 0; i < size * size; i++) {
-    const v = Math.floor(Math.random() * 256);
-    data[i * 4] = v;
-    data[i * 4 + 1] = v;
-    data[i * 4 + 2] = v;
-    data[i * 4 + 3] = 255;
+  for (let z = 0; z < size; z++) {
+    for (let x = 0; x < size; x++) {
+      const val = hashForTexture(x, z);
+      let v = Math.floor(val * 256);
+      if (v > 255) v = 255;
+      const i = z * size + x;
+      data[i * 4] = v;
+      data[i * 4 + 1] = v;
+      data[i * 4 + 2] = v;
+      data[i * 4 + 3] = 255;
+    }
   }
   const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
@@ -33,7 +45,7 @@ const RENDER_SCALE = 0.7;
 const rtA = new THREE.WebGLRenderTarget(
   Math.floor(window.innerWidth * RENDER_SCALE),
   Math.floor(window.innerHeight * RENDER_SCALE),
-  { type: THREE.FloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }
+  { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }
 );
 
 const SC = 250.0;
@@ -95,10 +107,10 @@ vec3 noised(in vec2 x) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   vec2 du = 6.0 * f * (1.0 - f);
   vec2 p = floor(x);
-  float a = texture(iChannel0, (p + vec2(0.0, 0.0) + 0.5) / 256.0).x;
-  float b = texture(iChannel0, (p + vec2(1.0, 0.0) + 0.5) / 256.0).x;
-  float c = texture(iChannel0, (p + vec2(0.0, 1.0) + 0.5) / 256.0).x;
-  float d = texture(iChannel0, (p + vec2(1.0, 1.0) + 0.5) / 256.0).x;
+  float a = texture2D(iChannel0, (p + vec2(0.0, 0.0) + 0.5) / 256.0).x;
+  float b = texture2D(iChannel0, (p + vec2(1.0, 0.0) + 0.5) / 256.0).x;
+  float c = texture2D(iChannel0, (p + vec2(0.0, 1.0) + 0.5) / 256.0).x;
+  float d = texture2D(iChannel0, (p + vec2(1.0, 1.0) + 0.5) / 256.0).x;
   return vec3(a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y,
               du * (vec2(b - a, c - a) + (a - b - c + d) * u.yx));
 }
@@ -110,7 +122,7 @@ float terrainH(in vec2 x) {
   float a = 0.0;
   float b = 1.0;
   vec2 d = vec2(0.0);
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 16; i++) {
     vec3 n = noised(p);
     d += n.yz;
     a += b * n.x / (1.0 + dot(d, d));
@@ -125,7 +137,7 @@ float terrainM(in vec2 x) {
   float a = 0.0;
   float b = 1.0;
   vec2 d = vec2(0.0);
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 9; i++) {
     vec3 n = noised(p);
     d += n.yz;
     a += b * n.x / (1.0 + dot(d, d));
@@ -184,11 +196,11 @@ vec3 calcNormal(in vec3 pos, float t) {
 
 float fbm(vec2 p) {
   float f = 0.0;
-  f += 0.5000 * texture(iChannel0, p / 256.0).x;
+  f += 0.5000 * texture2D(iChannel0, p / 256.0).x;
   p = m2 * p * 2.02;
-  f += 0.2500 * texture(iChannel0, p / 256.0).x;
+  f += 0.2500 * texture2D(iChannel0, p / 256.0).x;
   p = m2 * p * 2.03;
-  f += 0.1250 * texture(iChannel0, p / 256.0).x;
+  f += 0.1250 * texture2D(iChannel0, p / 256.0).x;
   return f / 0.875;
 }
 
@@ -234,9 +246,9 @@ vec4 render(in vec3 ro, in vec3 rd) {
     float fre = clamp(1.0 + dot(rd, nor), 0.0, 1.0);
     vec3 hal = normalize(light1 - rd);
 
-    float r = texture(iChannel0, (7.0 / SC) * pos.xz / 256.0).x;
+    float r = texture2D(iChannel0, (7.0 / SC) * pos.xz / 256.0).x;
     col = (r * 0.25 + 0.75) * 0.9 * mix(vec3(0.08, 0.05, 0.03), vec3(0.10, 0.09, 0.08),
-                                         texture(iChannel0, 0.00007 * vec2(pos.x, pos.y * 48.0) / SC).x);
+                                         texture2D(iChannel0, 0.00007 * vec2(pos.x, pos.y * 48.0) / SC).x);
     col = mix(col, 0.20 * vec3(0.45, 0.30, 0.15) * (0.50 + 0.50 * r), smoothstep(0.70, 0.9, nor.y));
     col = mix(col, 0.15 * vec3(0.30, 0.30, 0.10) * (0.25 + 0.75 * r), smoothstep(0.95, 1.0, nor.y));
     col *= 0.1 + 1.8 * sqrt(fbm(pos.xz * 0.04) * fbm(pos.xz * 0.005));
@@ -269,7 +281,7 @@ vec4 render(in vec3 ro, in vec3 rd) {
   }
 
   col += 0.3 * vec3(1.0, 0.7, 0.3) * pow(sundot, 8.0);
-  col = sqrt(col);
+  col = sqrt(max(col, 0.0));
   return vec4(col, t);
 }
 
@@ -303,7 +315,7 @@ uniform vec3 iResolution;
 varying vec2 vUv;
 
 void main() {
-  vec3 col = texture(iChannel0, vUv).xyz;
+  vec3 col = texture2D(iChannel0, vUv).xyz;
 
   col *= 0.5 + 0.5 * pow(16.0 * vUv.x * vUv.y * (1.0 - vUv.x) * (1.0 - vUv.y), 0.1);
   col = clamp(col, 0.0, 1.0);
@@ -339,6 +351,10 @@ const postMaterial = new THREE.ShaderMaterial({
 
 const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), terrainMaterial);
 const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMaterial);
+quad.frustumCulled = false;
+postQuad.frustumCulled = false;
+terrainScene.add(quad);
+postScene.add(postQuad);
 
 const keys = {};
 window.addEventListener('keydown', (e) => { keys[e.code] = true; e.preventDefault(); });
@@ -385,15 +401,11 @@ function animate() {
   terrainUniforms.iTime.value = now * 0.001;
 
   renderer.setRenderTarget(rtA);
-  scene.children.length = 0;
-  scene.add(quad);
-  renderer.render(scene, orthoCamera);
+  renderer.render(terrainScene, orthoCamera);
 
   postUniforms.iChannel0.value = rtA.texture;
   renderer.setRenderTarget(null);
-  scene.children.length = 0;
-  scene.add(postQuad);
-  renderer.render(scene, orthoCamera);
+  renderer.render(postScene, orthoCamera);
 }
 
 animate();
