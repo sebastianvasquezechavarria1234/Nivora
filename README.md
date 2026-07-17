@@ -1,4 +1,5 @@
-<div align="center">
+![Preview](preview.jpg)
+<div>
 
 # Where the River Goes
 
@@ -6,11 +7,6 @@
 
 Originally created by [P_Malin](https://www.shadertoy.com/user/P_Malin) on Shadertoy — ported to a standalone WebGL2 experience.
 
-[![WebGL2](https://img.shields.io/badge/WebGL-2.0-blue?logo=webgl&logoColor=white)](#)
-[![GLSL](https://img.shields.io/badge/GLSL-300%20es-green)](#)
-[![HTML5](https://img.shields.io/badge/HTML5-zero%20dependencies-orange)](#)
-
-![Preview](preview.jpg)
 
 </div>
 
@@ -223,5 +219,7 @@ The original shader is authored by P_Malin and hosted on Shadertoy under their t
 <div align="center">
 
 *Every pixel, every frame, computed from pure mathematics.*
+</br>
+Made with ❤️ by <a href="https://sebas-dev.vercel.app/" target="_blank" rel="noopener noreferrer">Sebastián V</a>
 
 </div>
